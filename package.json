@@ -1,0 +1,14 @@
+{
+  "name": "laas",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w @laas/api\" \"npm run dev -w @laas/web\"",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
