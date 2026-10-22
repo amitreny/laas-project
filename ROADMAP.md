@@ -32,16 +32,19 @@ Kubernetes is the second (Phase 9). If that swap is painless, the abstraction wa
 
 **Done when:** you click Start, type `uname -a` in the browser, click Stop, and `docker ps` is empty.
 
-## Phase 2 — Lab catalog  ← *we are here*
+## Phase 2 — Lab catalog  ✅
 **Learn:** declarative definitions, separating *content* from *platform*.
 - `labs/<slug>/lab.yaml`: image, resources, TTL, setup script, steps.
 - Markdown instructions shown next to the terminal.
 - `GET /api/labs`, start a session *of a lab*. Validate definitions with a schema (zod).
 - Custom lab images (Dockerfile per lab), built and tagged by a script.
 
-## Phase 3 — Persistence, lifecycle & reconciliation
+## Phase 3 — Persistence, lifecycle & reconciliation  ← *we are here*
 **Learn:** state machines, the controller/reconciler pattern (how k8s operators think), crash safety.
-- SQLite + an ORM/query builder (Drizzle). Session states: `pending → running → expiring → terminated | failed`.
+- SQLite via Node's built-in `node:sqlite` with plain SQL and versioned migrations.
+  Session states: `pending → running → terminating → terminated`, `pending → failed`,
+  moved only by compare-and-set updates.
+- Async provisioning: `POST` returns `202 pending`, the client polls until `running`.
 - TTL + idle timeout; a reaper loop that ends expired sessions; "extend time" button.
 - Reconciler: on boot and periodically, diff DB vs `docker ps --filter label=laas.session`
   and fix both directions (orphan containers, ghost sessions).

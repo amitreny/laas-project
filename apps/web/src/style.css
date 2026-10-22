@@ -43,6 +43,17 @@ h1 {
   font-size: 14px;
 }
 
+#timer {
+  font-variant-numeric: tabular-nums;
+  color: #9aa3b2;
+  font-size: 14px;
+}
+
+#timer.warn {
+  color: #f0a35b;
+  font-weight: 600;
+}
+
 button {
   padding: 6px 14px;
   border: 1px solid #3a4150;

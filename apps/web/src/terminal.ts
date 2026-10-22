@@ -15,7 +15,7 @@ export class LabTerminal {
 
   constructor(
     el: HTMLElement,
-    private onStatus: (text: string) => void,
+    private events: { onOpen: () => void; onClose: (code: number, reason: string) => void },
   ) {
     this.term.loadAddon(this.fitAddon);
     this.term.open(el);
@@ -30,18 +30,18 @@ export class LabTerminal {
   }
 
   connect(sessionId: string) {
-    this.term.reset();
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const socket = new WebSocket(`${proto}://${location.host}/api/sessions/${sessionId}/terminal`);
     socket.binaryType = 'arraybuffer';
     socket.onopen = () => {
-      this.onStatus('Connected');
+      this.events.onOpen();
       this.send({ type: 'resize', cols: this.term.cols, rows: this.term.rows });
       this.term.focus();
     };
     socket.onmessage = (e) => this.term.write(new Uint8Array(e.data as ArrayBuffer));
+    // Only report closes we didn't ask for; disconnect() clears this.socket first.
     socket.onclose = (e) => {
-      if (this.socket === socket) this.onStatus(`Disconnected${e.reason ? `: ${e.reason}` : ''}`);
+      if (this.socket === socket) this.events.onClose(e.code, e.reason);
     };
     this.socket = socket;
   }
@@ -50,6 +50,9 @@ export class LabTerminal {
     const socket = this.socket;
     this.socket = null;
     socket?.close();
+  }
+
+  reset() {
     this.term.reset();
   }
 

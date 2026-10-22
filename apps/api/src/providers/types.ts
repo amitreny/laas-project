@@ -21,8 +21,16 @@ export interface Shell {
   close(): void;
 }
 
+/** What the runtime actually has — the reconciler compares this against the database. */
+export interface LabInstance {
+  sessionId: string;
+  running: boolean;
+}
+
 export interface LabProvider {
   create(opts: CreateLabOptions): Promise<void>;
   openShell(sessionId: string): Promise<Shell>;
+  /** Idempotent: destroying something that is already gone succeeds. */
   destroy(sessionId: string): Promise<void>;
+  list(): Promise<LabInstance[]>;
 }

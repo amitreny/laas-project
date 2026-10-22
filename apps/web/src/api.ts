@@ -12,10 +12,17 @@ export interface LabDetail extends LabSummary {
   steps: { title: string; markdown: string }[];
 }
 
+// Mirrors toDto in apps/api/src/sessions.ts.
 export interface Session {
   id: string;
   lab: string;
+  state: 'pending' | 'running' | 'terminating' | 'terminated' | 'failed';
   createdAt: string;
+  startedAt: string | null;
+  expiresAt: string | null;
+  endedAt: string | null;
+  endReason: 'user' | 'expired' | 'idle' | 'container_lost' | 'provision_failed' | 'interrupted' | null;
+  error: string | null;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -37,5 +44,9 @@ export const startSession = (lab: string) =>
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ lab }),
   });
+
+export const getSession = (id: string) => request<Session>(`/api/sessions/${id}`);
+
+export const extendSession = (id: string) => request<Session>(`/api/sessions/${id}/extend`, { method: 'POST' });
 
 export const stopSession = (id: string) => request<void>(`/api/sessions/${id}`, { method: 'DELETE' });

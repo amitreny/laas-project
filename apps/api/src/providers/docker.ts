@@ -1,6 +1,6 @@
 import Docker from 'dockerode';
 import { PassThrough } from 'node:stream';
-import type { CreateLabOptions, LabProvider, Shell } from './types.js';
+import type { CreateLabOptions, LabInstance, LabProvider, Shell } from './types.js';
 
 // Every container we create carries these labels, so we can always find "our" containers
 // (Phase 3 uses them to reconcile the database against what is actually running).
@@ -66,7 +66,18 @@ export class DockerProvider implements LabProvider {
   }
 
   async destroy(sessionId: string): Promise<void> {
-    await this.docker.getContainer(containerName(sessionId)).remove({ force: true });
+    try {
+      await this.docker.getContainer(containerName(sessionId)).remove({ force: true });
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode;
+      // 404: already gone. 409: removal already in progress. Either way the outcome we want is happening.
+      if (status !== 404 && status !== 409) throw err;
+    }
+  }
+
+  async list(): Promise<LabInstance[]> {
+    const containers = await this.docker.listContainers({ all: true, filters: { label: [SESSION_LABEL] } });
+    return containers.map((c) => ({ sessionId: c.Labels[SESSION_LABEL], running: c.State === 'running' }));
   }
 
   /** Runs a script non-interactively and waits for it, capturing combined stdout+stderr. */
