@@ -22,7 +22,7 @@ Kubernetes is the second (Phase 9). If that swap is painless, the abstraction wa
 - Install Docker Desktop (WSL 2 backend), confirm `docker run hello-world`.
 - npm workspaces monorepo: `apps/api` (Fastify + dockerode), `apps/web` (Vite + xterm.js).
 
-## Phase 1 — One lab, one user, a terminal in the browser  ← *we are here*
+## Phase 1 — One lab, one user, a terminal in the browser  ✅
 **Learn:** Docker Engine API, container lifecycle, `exec` with a TTY, WebSockets, terminal emulation.
 - `POST /api/sessions` → pull image if missing, create + start a container labeled `laas.session=<id>`.
 - `WS /api/sessions/:id/terminal` → `docker exec bash` with a TTY, piped both ways over a WebSocket.
@@ -32,7 +32,7 @@ Kubernetes is the second (Phase 9). If that swap is painless, the abstraction wa
 
 **Done when:** you click Start, type `uname -a` in the browser, click Stop, and `docker ps` is empty.
 
-## Phase 2 — Lab catalog
+## Phase 2 — Lab catalog  ← *we are here*
 **Learn:** declarative definitions, separating *content* from *platform*.
 - `labs/<slug>/lab.yaml`: image, resources, TTL, setup script, steps.
 - Markdown instructions shown next to the terminal.

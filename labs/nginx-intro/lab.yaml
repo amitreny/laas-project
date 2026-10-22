@@ -1,0 +1,14 @@
+title: Your first web server
+description: Start nginx, serve your own page and read the access logs.
+difficulty: beginner
+# No `image` here: this lab is built from its Dockerfile by `npm run labs:build`.
+workdir: /var/www/html
+ttlMinutes: 30
+
+steps:
+  - title: Start nginx
+    file: steps/01-start.md
+  - title: Serve your own page
+    file: steps/02-your-page.md
+  - title: Read the logs
+    file: steps/03-logs.md

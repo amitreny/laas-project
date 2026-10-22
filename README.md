@@ -6,18 +6,31 @@ See [ROADMAP.md](ROADMAP.md) for the phased plan.
 ## Layout
 
 ```
-apps/api   Fastify control plane + Docker provider (dockerode)
-apps/web   Vite + xterm.js browser terminal
+apps/api   Fastify control plane, lab catalog loader, Docker provider (dockerode)
+apps/web   Vite + xterm.js: lab picker, step instructions, browser terminal
+labs/      Lab content: one folder per lab (lab.yaml + steps/*.md + optional Dockerfile)
 ```
 
-## Run (Phase 1)
+## Run
 
 Prerequisite: Docker Desktop running (`docker run hello-world` works).
 
 ```sh
 npm install
-npm run dev        # api on :3000, web on :5173
+npm run labs:build   # build images for labs that ship a Dockerfile
+npm run dev          # api on :3000, web on :5173
 ```
 
-Open http://localhost:5173, click **Start lab**, and you get a shell in a fresh `ubuntu:24.04` container.
-Check `docker ps --filter label=laas.session` to see it from the host.
+Open http://localhost:5173, pick a lab, and follow the steps. The **Run** buttons type commands into the terminal.
+Check `docker ps --filter label=laas.session` to see the lab containers from the host.
+
+## Writing a lab
+
+```
+labs/<slug>/
+  lab.yaml        title, description, image (or a Dockerfile), workdir, resources, setup, steps
+  steps/*.md      one Markdown file per step; ```bash blocks get a Run button
+  Dockerfile      optional, for labs that need tools baked into the image
+```
+
+`npm run labs:validate` checks every lab against the schema in `apps/api/src/catalog.ts`.

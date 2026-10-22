@@ -1,15 +1,15 @@
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { randomUUID } from 'node:crypto';
+import { loadCatalog, toDetail, toSummary } from './catalog.js';
 import { DockerProvider } from './providers/docker.js';
 import type { LabProvider, Shell } from './providers/types.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
-const DEFAULT_IMAGE = 'ubuntu:24.04';
 
 interface Session {
   id: string;
-  image: string;
+  lab: string;
   createdAt: string;
 }
 
@@ -22,20 +22,47 @@ type ClientMessage =
 const app = Fastify({ logger: true });
 await app.register(websocket);
 
+// Fail fast: a broken lab definition should stop the deploy, not surprise a user later.
+const catalog = await loadCatalog();
+app.log.info(`loaded ${catalog.size} lab(s): ${[...catalog.keys()].join(', ')}`);
+
 const provider: LabProvider = new DockerProvider();
 // Phase 1: in-memory only. Restarting the API forgets sessions (Phase 3 fixes this).
 const sessions = new Map<string, Session>();
 
 app.get('/api/health', async () => ({ ok: true }));
 
+app.get('/api/labs', async () => [...catalog.values()].map(toSummary));
+
+app.get<{ Params: { slug: string } }>('/api/labs/:slug', async (req, reply) => {
+  const lab = catalog.get(req.params.slug);
+  if (!lab) return reply.code(404).send({ error: 'lab not found' });
+  return toDetail(lab);
+});
+
 app.get('/api/sessions', async () => [...sessions.values()]);
 
-app.post('/api/sessions', async (_req, reply) => {
-  const session: Session = { id: randomUUID(), image: DEFAULT_IMAGE, createdAt: new Date().toISOString() };
-  await provider.create({ sessionId: session.id, image: session.image });
-  sessions.set(session.id, session);
-  return reply.code(201).send(session);
-});
+app.post<{ Body: { lab: string } }>(
+  '/api/sessions',
+  { schema: { body: { type: 'object', required: ['lab'], properties: { lab: { type: 'string' } } } } },
+  async (req, reply) => {
+    const lab = catalog.get(req.body.lab);
+    if (!lab) return reply.code(404).send({ error: 'lab not found' });
+
+    const session: Session = { id: randomUUID(), lab: lab.slug, createdAt: new Date().toISOString() };
+    await provider.create({
+      sessionId: session.id,
+      labSlug: lab.slug,
+      image: lab.image,
+      workdir: lab.workdir,
+      memoryMb: lab.resources.memoryMb,
+      cpus: lab.resources.cpus,
+      setup: lab.setup,
+    });
+    sessions.set(session.id, session);
+    return reply.code(201).send(session);
+  },
+);
 
 app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
   const { id } = req.params;

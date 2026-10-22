@@ -8,11 +8,25 @@
   <body>
     <header>
       <h1>LaaS</h1>
-      <button id="start">Start lab</button>
-      <button id="stop" disabled>Stop lab</button>
-      <span id="status">No lab running</span>
+      <span id="lab-title"></span>
+      <span id="status"></span>
+      <button id="stop" hidden>Stop lab</button>
     </header>
-    <main id="terminal"></main>
+
+    <main id="catalog"></main>
+
+    <main id="lab" hidden>
+      <aside>
+        <article id="step"></article>
+        <nav>
+          <button id="prev">Back</button>
+          <span id="step-counter"></span>
+          <button id="next">Next</button>
+        </nav>
+      </aside>
+      <div id="terminal"></div>
+    </main>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

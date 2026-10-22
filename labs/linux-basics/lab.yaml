@@ -1,0 +1,28 @@
+title: Linux basics
+description: Find your way around a Linux filesystem, uncover a hidden file and slice through a large log.
+difficulty: beginner
+image: ubuntu:24.04
+workdir: /root/workspace
+resources:
+  memoryMb: 256
+  cpus: 0.5
+ttlMinutes: 30
+
+# Runs as root before you get a shell. This is how authors prepare state
+# without having to build a custom image.
+setup: |
+  mkdir -p /root/workspace/projects/alpha /root/workspace/projects/beta /root/workspace/.secret
+  echo "The password is: penguin" > /root/workspace/.secret/note.txt
+  echo "# Alpha" > /root/workspace/projects/alpha/README.md
+  echo "# Beta" > /root/workspace/projects/beta/README.md
+  for i in $(seq 1 500); do
+    if [ $((i % 97)) -eq 0 ]; then echo "$i ERROR disk quota exceeded"; else echo "$i INFO request ok"; fi
+  done > /root/workspace/app.log
+
+steps:
+  - title: Look around
+    file: steps/01-look-around.md
+  - title: Find the hidden file
+    file: steps/02-hidden-file.md
+  - title: Read a big log
+    file: steps/03-big-log.md

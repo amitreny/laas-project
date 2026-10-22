@@ -3,7 +3,13 @@
 
 export interface CreateLabOptions {
   sessionId: string;
+  labSlug: string;
   image: string;
+  workdir: string;
+  memoryMb: number;
+  cpus: number;
+  /** Shell script run as root after start; a non-zero exit fails creation. */
+  setup?: string;
 }
 
 /** A live interactive shell inside a lab, already attached to a TTY. */

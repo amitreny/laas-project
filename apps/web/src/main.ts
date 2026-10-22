@@ -1,73 +1,104 @@
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
+import { getLab, listLabs, startSession, stopSession, type LabDetail } from './api';
+import { renderStep } from './instructions';
+import { LabTerminal } from './terminal';
 import './style.css';
 
-// Must match ClientMessage in apps/api/src/server.ts.
-type ClientMessage =
-  | { type: 'input'; data: string }
-  | { type: 'resize'; cols: number; rows: number };
+const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
-const startBtn = document.querySelector<HTMLButtonElement>('#start')!;
-const stopBtn = document.querySelector<HTMLButtonElement>('#stop')!;
-const statusEl = document.querySelector<HTMLSpanElement>('#status')!;
-
-const term = new Terminal({ cursorBlink: true, fontSize: 14 });
-const fit = new FitAddon();
-term.loadAddon(fit);
-term.open(document.querySelector<HTMLElement>('#terminal')!);
-fit.fit();
-window.addEventListener('resize', () => fit.fit());
-
-let sessionId: string | null = null;
-let socket: WebSocket | null = null;
+const statusEl = $<HTMLSpanElement>('#status');
+const stopBtn = $<HTMLButtonElement>('#stop');
+const catalogEl = $<HTMLElement>('#catalog');
+const labEl = $<HTMLElement>('#lab');
+const labTitleEl = $<HTMLElement>('#lab-title');
+const stepEl = $<HTMLElement>('#step');
+const stepCounterEl = $<HTMLSpanElement>('#step-counter');
+const prevBtn = $<HTMLButtonElement>('#prev');
+const nextBtn = $<HTMLButtonElement>('#next');
 
 const setStatus = (text: string) => (statusEl.textContent = text);
+const terminal = new LabTerminal($('#terminal'), setStatus);
 
-const send = (msg: ClientMessage) => {
-  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg));
-};
+let lab: LabDetail | null = null;
+let stepIndex = 0;
+let sessionId: string | null = null;
 
-term.onData((data) => send({ type: 'input', data }));
-term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
+// --- catalog view ---------------------------------------------------------
 
-function connect(id: string) {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  socket = new WebSocket(`${proto}://${location.host}/api/sessions/${id}/terminal`);
-  socket.binaryType = 'arraybuffer';
-  socket.onopen = () => {
-    setStatus(`Connected to ${id.slice(0, 8)}`);
-    send({ type: 'resize', cols: term.cols, rows: term.rows });
-    term.focus();
-  };
-  socket.onmessage = (e) => term.write(new Uint8Array(e.data as ArrayBuffer));
-  socket.onclose = (e) => setStatus(`Disconnected${e.reason ? `: ${e.reason}` : ''}`);
+async function showCatalog() {
+  labEl.hidden = true;
+  catalogEl.hidden = false;
+  stopBtn.hidden = true;
+  labTitleEl.textContent = '';
+  setStatus('');
+
+  catalogEl.replaceChildren();
+  for (const summary of await listLabs()) {
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.innerHTML = `
+      <span class="meta"></span>
+      <strong></strong>
+      <p></p>`;
+    card.querySelector('.meta')!.textContent =
+      `${summary.difficulty} · ${summary.stepCount} steps · ${summary.ttlMinutes} min`;
+    card.querySelector('strong')!.textContent = summary.title;
+    card.querySelector('p')!.textContent = summary.description;
+    card.onclick = () => openLab(summary.slug);
+    catalogEl.append(card);
+  }
 }
 
-startBtn.onclick = async () => {
-  startBtn.disabled = true;
-  setStatus('Starting lab… (the first run pulls the image, this can take a minute)');
+// --- lab view -------------------------------------------------------------
+
+async function openLab(slug: string) {
+  lab = await getLab(slug);
+  stepIndex = 0;
+  catalogEl.hidden = true;
+  labEl.hidden = false;
+  labTitleEl.textContent = lab.title;
+  showStep();
+  terminal.fit();
+
+  // Users can start reading while the container boots.
+  setStatus('Starting lab…');
   try {
-    const res = await fetch('/api/sessions', { method: 'POST' });
-    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-    sessionId = ((await res.json()) as { id: string }).id;
-    term.reset();
-    connect(sessionId);
-    stopBtn.disabled = false;
+    sessionId = (await startSession(slug)).id;
+    stopBtn.hidden = false;
+    terminal.connect(sessionId);
   } catch (err) {
     setStatus(`Failed to start: ${(err as Error).message}`);
-    startBtn.disabled = false;
+    stopBtn.hidden = false; // doubles as "back to catalog"
   }
+}
+
+function showStep() {
+  if (!lab) return;
+  renderStep(stepEl, lab.steps[stepIndex].markdown, (cmd) => terminal.run(cmd));
+  stepEl.scrollTop = 0;
+  stepCounterEl.textContent = `Step ${stepIndex + 1} of ${lab.steps.length}`;
+  prevBtn.disabled = stepIndex === 0;
+  nextBtn.disabled = stepIndex === lab.steps.length - 1;
+}
+
+prevBtn.onclick = () => {
+  stepIndex--;
+  showStep();
+};
+nextBtn.onclick = () => {
+  stepIndex++;
+  showStep();
 };
 
 stopBtn.onclick = async () => {
-  if (!sessionId) return;
   stopBtn.disabled = true;
-  setStatus('Stopping…');
-  socket?.close();
-  await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-  sessionId = null;
-  term.reset();
-  setStatus('No lab running');
-  startBtn.disabled = false;
+  terminal.disconnect();
+  if (sessionId) {
+    setStatus('Stopping…');
+    await stopSession(sessionId).catch(() => {});
+    sessionId = null;
+  }
+  stopBtn.disabled = false;
+  await showCatalog();
 };
+
+showCatalog().catch((err) => setStatus(`Failed to load labs: ${(err as Error).message}`));
