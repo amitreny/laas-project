@@ -32,7 +32,19 @@ Sessions are stored in `data/laas.db` (SQLite) and keep running across API resta
 | `EXTEND_MINUTES` | 15 | how much "Extend time" adds (up to 2× the lab's TTL in total) |
 | `PENDING_TIMEOUT_MINUTES` | 5 | give up on a lab that hasn't started by then |
 | `TICK_MS` | 10000 | how often the controller loop reaps and reconciles |
+| `MAX_SESSIONS_PER_USER` | 1 | active labs one user may have |
+| `MAX_ACTIVE_SESSIONS` | 20 | active labs across the whole platform |
+| `AUTH_SECRET` | random per start | HMAC key for terminal tickets; must be shared by all API processes |
+| `TRUST_PROXY` | false | set `true` behind a reverse proxy so rate limits see real client IPs |
 | `DB_PATH`, `PORT`, `LABS_DIR` | | where things live |
+
+## Users
+
+Anyone can sign up from the web UI. To make someone an admin (sees and can stop every lab):
+
+```sh
+npm run users:promote someone@example.com
+```
 
 ## Writing a lab
 

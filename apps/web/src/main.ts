@@ -1,12 +1,20 @@
 import {
+  AuthError,
   extendSession,
-  getSession,
   getLab,
+  getSession,
+  getTicket,
   listLabs,
+  logIn,
+  logOut,
+  me,
+  myActiveSessions,
+  signUp,
   startSession,
   stopSession,
   type LabDetail,
   type Session,
+  type User,
 } from './api';
 import { renderStep } from './instructions';
 import { LabTerminal } from './terminal';
@@ -18,6 +26,17 @@ const statusEl = $<HTMLSpanElement>('#status');
 const timerEl = $<HTMLSpanElement>('#timer');
 const extendBtn = $<HTMLButtonElement>('#extend');
 const stopBtn = $<HTMLButtonElement>('#stop');
+const userEl = $<HTMLSpanElement>('#user');
+const logoutBtn = $<HTMLButtonElement>('#logout');
+const authEl = $<HTMLElement>('#auth');
+const authForm = $<HTMLFormElement>('#auth-form');
+const authHeading = $<HTMLElement>('#auth-heading');
+const authSubmit = $<HTMLButtonElement>('#auth-submit');
+const authError = $<HTMLElement>('#auth-error');
+const authSwitch = $<HTMLAnchorElement>('#auth-switch');
+const authSwitchText = $<HTMLSpanElement>('#auth-switch-text');
+const emailInput = $<HTMLInputElement>('#email');
+const passwordInput = $<HTMLInputElement>('#password');
 const catalogEl = $<HTMLElement>('#catalog');
 const labEl = $<HTMLElement>('#lab');
 const labTitleEl = $<HTMLElement>('#lab-title');
@@ -34,34 +53,104 @@ const terminal = new LabTerminal($('#terminal'), {
   onClose: () => void onTerminalClosed(),
 });
 
+let user: User | null = null;
 let lab: LabDetail | null = null;
 let stepIndex = 0;
 let session: Session | null = null;
 let countdown: number | undefined;
 
-// The active session id survives page refreshes. Phase 4 ties sessions to a user instead.
-const STORAGE_KEY = 'laas.session';
-function remember(id: string | null) {
-  try {
-    if (id) localStorage.setItem(STORAGE_KEY, id);
-    else localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // storage unavailable (private mode etc.): refresh just won't resume
-  }
+function showView(view: 'auth' | 'catalog' | 'lab') {
+  authEl.hidden = view !== 'auth';
+  catalogEl.hidden = view !== 'catalog';
+  labEl.hidden = view !== 'lab';
 }
-function recall(): string | null {
+
+/** Stop following the current session (it may keep running on the server). */
+function detach() {
+  stopCountdown();
+  terminal.disconnect();
+  session = null;
+}
+
+/** Any 401 sends the user back to the sign-in screen; other errors go to the status line. */
+function handleError(err: unknown, prefix = '') {
+  if (err instanceof AuthError) return showAuth('Your login has expired. Please sign in again.');
+  setStatus(`${prefix}${(err as Error).message}`);
+}
+
+// --- auth -----------------------------------------------------------------
+
+let authMode: 'login' | 'signup' = 'login';
+
+function setAuthMode(mode: 'login' | 'signup') {
+  authMode = mode;
+  const signup = mode === 'signup';
+  authHeading.textContent = signup ? 'Create an account' : 'Sign in';
+  authSubmit.textContent = signup ? 'Create account' : 'Sign in';
+  authSwitchText.textContent = signup ? 'Already have an account?' : 'No account yet?';
+  authSwitch.textContent = signup ? 'Sign in' : 'Create one';
+  // Lets password managers offer to generate a password on signup and fill one on login.
+  passwordInput.autocomplete = signup ? 'new-password' : 'current-password';
+  authError.textContent = '';
+}
+
+function showAuth(message = '') {
+  detach();
+  user = null;
+  for (const el of [userEl, logoutBtn, stopBtn, extendBtn]) el.hidden = true;
+  labTitleEl.textContent = '';
+  setStatus('');
+  showView('auth');
+  setAuthMode(authMode);
+  authError.textContent = message;
+  emailInput.focus();
+}
+
+authSwitch.onclick = (e) => {
+  e.preventDefault();
+  setAuthMode(authMode === 'login' ? 'signup' : 'login');
+};
+
+authForm.onsubmit = async (e) => {
+  e.preventDefault();
+  authSubmit.disabled = true;
+  authError.textContent = '';
   try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
+    const submit = authMode === 'login' ? logIn : signUp;
+    user = await submit(emailInput.value, passwordInput.value);
+    passwordInput.value = '';
+    await enterApp();
+  } catch (err) {
+    authError.textContent = (err as Error).message;
+  } finally {
+    authSubmit.disabled = false;
   }
+};
+
+// Logging out doesn't stop a running lab; with no terminal attached, the idle reaper ends it.
+logoutBtn.onclick = async () => {
+  await logOut().catch(() => {});
+  showAuth();
+};
+
+async function enterApp() {
+  userEl.textContent = user!.email + (user!.role === 'admin' ? ' (admin)' : '');
+  userEl.hidden = false;
+  logoutBtn.hidden = false;
+
+  // The server knows whether we have a lab running, so resume it — from this tab, another tab, or another device.
+  const active = (await myActiveSessions()).find((s) => s.state === 'pending' || s.state === 'running');
+  if (active) {
+    await showLab(active.lab);
+    return follow(active);
+  }
+  await showCatalog();
 }
 
 // --- catalog view ---------------------------------------------------------
 
 async function showCatalog() {
-  labEl.hidden = true;
-  catalogEl.hidden = false;
+  showView('catalog');
   stopBtn.hidden = true;
   extendBtn.hidden = true;
   timerEl.textContent = '';
@@ -90,8 +179,7 @@ async function showCatalog() {
 async function showLab(slug: string) {
   lab = await getLab(slug);
   stepIndex = 0;
-  catalogEl.hidden = true;
-  labEl.hidden = false;
+  showView('lab');
   labTitleEl.textContent = lab.title;
   terminal.reset();
   showStep();
@@ -99,13 +187,12 @@ async function showLab(slug: string) {
 }
 
 async function startLab(slug: string) {
-  await showLab(slug);
   try {
-    const created = await startSession(slug);
-    remember(created.id);
-    await follow(created);
+    await showLab(slug);
+    await follow(await startSession(slug));
   } catch (err) {
-    showEnded(`Failed to start: ${(err as Error).message}`);
+    if (err instanceof AuthError) return handleError(err);
+    showEnded(`Couldn't start the lab: ${(err as Error).message}`);
   }
 }
 
@@ -114,36 +201,49 @@ async function follow(s: Session) {
   session = s;
   stopBtn.textContent = 'Stop lab';
   stopBtn.hidden = false;
-  while (s.state === 'pending') {
-    setStatus('Starting lab…');
-    await sleep(1000);
-    s = await getSession(s.id);
-    if (session?.id !== s.id) return; // user stopped it meanwhile
-    session = s;
-  }
-  if (s.state !== 'running') return showEnded(s);
+  try {
+    while (s.state === 'pending') {
+      setStatus('Starting lab…');
+      await sleep(1000);
+      s = await getSession(s.id);
+      if (session?.id !== s.id) return; // user stopped it meanwhile
+      session = s;
+    }
+    if (s.state !== 'running') return showEnded(s);
 
-  extendBtn.hidden = false;
-  startCountdown();
-  terminal.connect(s.id);
+    extendBtn.hidden = false;
+    startCountdown();
+    await connectTerminal(s.id);
+  } catch (err) {
+    handleError(err);
+  }
+}
+
+/** Trade the login cookie for a fresh short-lived ticket, then open the terminal socket with it. */
+async function connectTerminal(id: string) {
+  const ticket = await getTicket(id);
+  if (session?.id === id) terminal.connect(id, ticket);
 }
 
 /** The socket dropped without us asking: lab ended, shell exited, or the API restarted. */
 async function onTerminalClosed() {
   const id = session?.id;
   if (!id) return;
-  const s = await getSession(id).catch(() => null);
-  if (session?.id !== id) return;
-  if (!s) {
+  let s: Session;
+  try {
+    s = await getSession(id);
+  } catch (err) {
+    if (err instanceof AuthError) return handleError(err);
     setStatus('API unreachable, retrying…');
     await sleep(2000);
     return onTerminalClosed();
   }
+  if (session?.id !== id) return;
   session = s;
   if (s.state !== 'running') return showEnded(s);
   setStatus('Reconnecting…');
   await sleep(1000);
-  if (session?.id === id) terminal.connect(id);
+  await connectTerminal(id).catch(() => onTerminalClosed());
 }
 
 const END_MESSAGES: Record<NonNullable<Session['endReason']>, string> = {
@@ -156,10 +256,7 @@ const END_MESSAGES: Record<NonNullable<Session['endReason']>, string> = {
 };
 
 function showEnded(s: Session | string) {
-  stopCountdown();
-  terminal.disconnect();
-  remember(null);
-  session = null;
+  detach();
   extendBtn.hidden = true;
   stopBtn.textContent = 'Back to labs';
   stopBtn.hidden = false;
@@ -194,7 +291,7 @@ extendBtn.onclick = async () => {
   try {
     session = await extendSession(session.id);
   } catch (err) {
-    setStatus(`Couldn't extend: ${(err as Error).message}`);
+    handleError(err, "Couldn't extend: ");
   }
 };
 
@@ -220,32 +317,31 @@ nextBtn.onclick = () => {
 
 stopBtn.onclick = async () => {
   const s = session;
-  session = null;
-  stopCountdown();
-  terminal.disconnect();
-  remember(null);
-  if (s) {
-    stopBtn.disabled = true;
-    setStatus('Stopping…');
-    await stopSession(s.id).catch(() => {});
+  detach();
+  try {
+    if (s) {
+      stopBtn.disabled = true;
+      setStatus('Stopping…');
+      await stopSession(s.id);
+    }
+    await showCatalog();
+  } catch (err) {
+    handleError(err);
+  } finally {
     stopBtn.disabled = false;
   }
-  await showCatalog();
 };
 
 // --- boot -----------------------------------------------------------------
 
 async function boot() {
-  const id = recall();
-  if (id) {
-    const s = await getSession(id).catch(() => null);
-    if (s && (s.state === 'pending' || s.state === 'running')) {
-      await showLab(s.lab);
-      return follow(s);
-    }
-    remember(null);
+  try {
+    user = await me();
+  } catch (err) {
+    if (err instanceof AuthError) return showAuth();
+    throw err;
   }
-  await showCatalog();
+  await enterApp();
 }
 
-boot().catch((err) => setStatus(`Failed to load: ${(err as Error).message}`));
+boot().catch((err) => handleError(err, 'Failed to load: '));

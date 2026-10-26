@@ -39,7 +39,7 @@ Kubernetes is the second (Phase 9). If that swap is painless, the abstraction wa
 - `GET /api/labs`, start a session *of a lab*. Validate definitions with a schema (zod).
 - Custom lab images (Dockerfile per lab), built and tagged by a script.
 
-## Phase 3 — Persistence, lifecycle & reconciliation  ← *we are here*
+## Phase 3 — Persistence, lifecycle & reconciliation  ✅
 **Learn:** state machines, the controller/reconciler pattern (how k8s operators think), crash safety.
 - SQLite via Node's built-in `node:sqlite` with plain SQL and versioned migrations.
   Session states: `pending → running → terminating → terminated`, `pending → failed`,
@@ -50,12 +50,13 @@ Kubernetes is the second (Phase 9). If that swap is painless, the abstraction wa
   and fix both directions (orphan containers, ghost sessions).
 - Reconnect: refresh the page and get back into the same session.
 
-## Phase 4 — Users, auth & quotas
+## Phase 4 — Users, auth & quotas  ← *we are here*
 **Learn:** authn vs authz, session cookies/JWT, multi-tenancy basics, rate limiting.
-- Sign up / log in (start simple; later OIDC via GitHub/Google).
-- A session belongs to a user; only the owner can attach to it.
-- Quotas: max concurrent labs per user, global capacity limit, per-IP rate limit.
-- Signed, short-lived tokens for WebSocket attach.
+- Email + password (scrypt) with a revocable, server-side login token in an HttpOnly cookie.
+  Later: OIDC via GitHub/Google, email verification.
+- A session belongs to a user; others get 404. Admins (`npm run users:promote`) see everything.
+- Quotas: max concurrent labs per user and globally (checked atomically), per-IP rate limits.
+- Signed, 30-second HMAC tickets for WebSocket attach; Origin check against CSRF.
 
 ## Phase 5 — Isolation & security
 **Learn:** the threat model of running untrusted users' code — the core risk of any LaaS.

@@ -8,7 +8,8 @@
     "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w @laas/api\" \"npm run dev -w @laas/web\"",
     "typecheck": "npm run typecheck --workspaces",
     "labs:validate": "npm run labs:validate -w @laas/api --",
-    "labs:build": "npm run labs:build -w @laas/api --"
+    "labs:build": "npm run labs:build -w @laas/api --",
+    "users:promote": "npm run users:promote -w @laas/api --"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"

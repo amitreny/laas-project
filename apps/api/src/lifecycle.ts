@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Catalog, Lab } from './catalog.js';
 import type { LabProvider } from './providers/types.js';
-import { ACTIVE_STATES, type EndReason, type SessionRow, type SessionStore } from './sessions.js';
+import { ACTIVE_STATES, type EndReason, type InsertResult, type Limits, type SessionRow, type SessionStore } from './sessions.js';
 
 const MINUTE = 60_000;
 
@@ -18,6 +18,8 @@ export interface LifecycleConfig {
   pendingTimeoutMinutes: number;
   /** How often the controller loop runs. */
   tickMs: number;
+  /** Max active labs per user, and across the whole platform. */
+  limits: Limits;
 }
 
 const num = (v: string | undefined, fallback: number) => (v ? Number(v) : fallback);
@@ -28,6 +30,10 @@ export const configFromEnv = (): LifecycleConfig => ({
   maxLifetimeFactor: 2,
   pendingTimeoutMinutes: num(process.env.PENDING_TIMEOUT_MINUTES, 5),
   tickMs: num(process.env.TICK_MS, 10_000),
+  limits: {
+    perUser: num(process.env.MAX_SESSIONS_PER_USER, 1),
+    global: num(process.env.MAX_ACTIVE_SESSIONS, 20),
+  },
 });
 
 /**
@@ -55,15 +61,15 @@ export class SessionManager extends EventEmitter<{ terminating: [sessionId: stri
     return this.store.get(id);
   }
 
-  listActive() {
-    return this.store.listByState(...ACTIVE_STATES);
+  listActive(userId?: string) {
+    return userId ? this.store.listActiveForUser(userId) : this.store.listByState(...ACTIVE_STATES);
   }
 
-  /** Records the session as pending and provisions it in the background. */
-  create(lab: Lab): SessionRow {
-    const session = this.store.insert(randomUUID(), lab.slug, Date.now());
-    void this.provision(session.id, lab);
-    return session;
+  /** Records the session as pending (if within limits) and provisions it in the background. */
+  create(lab: Lab, userId: string): InsertResult {
+    const result = this.store.insertWithinLimits(randomUUID(), lab.slug, userId, Date.now(), this.config.limits);
+    if ('session' in result) void this.provision(result.session.id, lab);
+    return result;
   }
 
   private async provision(id: string, lab: Lab) {

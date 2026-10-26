@@ -25,6 +25,7 @@ export const ACTIVE_STATES: readonly SessionState[] = ['pending', 'running', 'te
 export interface SessionRow {
   id: string;
   lab: string;
+  user_id: string | null;
   state: SessionState;
   created_at: number;
   started_at: number | null;
@@ -35,19 +36,48 @@ export interface SessionRow {
   error: string | null;
 }
 
-type MutableFields = Partial<Omit<SessionRow, 'id' | 'lab' | 'state' | 'created_at'>>;
+type MutableFields = Partial<Omit<SessionRow, 'id' | 'lab' | 'user_id' | 'state' | 'created_at'>>;
+
+export interface Limits {
+  perUser: number;
+  global: number;
+}
+
+export type InsertResult = { session: SessionRow } | { error: 'user_limit' | 'capacity' };
+
+const ACTIVE_SQL = `state IN ('pending', 'running', 'terminating')`;
 
 export class SessionStore {
   constructor(private db: DatabaseSync) {}
 
-  insert(id: string, lab: string, now: number): SessionRow {
-    this.db
-      .prepare(
-        `INSERT INTO sessions (id, lab, state, created_at, last_activity_at)
-         VALUES (:id, :lab, 'pending', :now, :now)`,
-      )
-      .run({ id, lab, now });
-    return this.get(id)!;
+  /**
+   * Count-then-insert inside one write transaction. Without it, two simultaneous requests could both
+   * see "0 active" and both insert. BEGIN IMMEDIATE takes the write lock up front, so this holds even
+   * with several API processes sharing the database.
+   */
+  insertWithinLimits(id: string, lab: string, userId: string, now: number, limits: Limits): InsertResult {
+    const count = (sql: string, ...args: string[]) =>
+      (this.db.prepare(`SELECT count(*) AS n FROM sessions WHERE ${sql}`).get(...args) as { n: number }).n;
+
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      let error: 'user_limit' | 'capacity' | undefined;
+      if (count(`user_id = ? AND ${ACTIVE_SQL}`, userId) >= limits.perUser) error = 'user_limit';
+      else if (count(ACTIVE_SQL) >= limits.global) error = 'capacity';
+      else {
+        this.db
+          .prepare(
+            `INSERT INTO sessions (id, lab, user_id, state, created_at, last_activity_at)
+             VALUES (:id, :lab, :userId, 'pending', :now, :now)`,
+          )
+          .run({ id, lab, userId, now });
+      }
+      this.db.exec('COMMIT');
+      return error ? { error } : { session: this.get(id)! };
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   get(id: string): SessionRow | undefined {
@@ -59,6 +89,12 @@ export class SessionStore {
     return this.db
       .prepare(`SELECT * FROM sessions WHERE state IN (${placeholders}) ORDER BY created_at`)
       .all(...states) as unknown as SessionRow[];
+  }
+
+  listActiveForUser(userId: string): SessionRow[] {
+    return this.db
+      .prepare(`SELECT * FROM sessions WHERE user_id = ? AND ${ACTIVE_SQL} ORDER BY created_at`)
+      .all(userId) as unknown as SessionRow[];
   }
 
   /**
@@ -95,6 +131,7 @@ const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOStrin
 export const toDto = (s: SessionRow) => ({
   id: s.id,
   lab: s.lab,
+  userId: s.user_id,
   state: s.state,
   createdAt: iso(s.created_at),
   startedAt: iso(s.started_at),

@@ -29,9 +29,11 @@ export class LabTerminal {
     this.fitAddon.fit();
   }
 
-  connect(sessionId: string) {
+  /** `ticket` is a short-lived token from POST /api/sessions/:id/ticket; get a fresh one for every connect. */
+  connect(sessionId: string, ticket: string) {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const socket = new WebSocket(`${proto}://${location.host}/api/sessions/${sessionId}/terminal`);
+    const url = `${proto}://${location.host}/api/sessions/${sessionId}/terminal?ticket=${encodeURIComponent(ticket)}`;
+    const socket = new WebSocket(url);
     socket.binaryType = 'arraybuffer';
     socket.onopen = () => {
       this.events.onOpen();

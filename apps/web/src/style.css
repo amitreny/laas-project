@@ -183,3 +183,79 @@ aside nav {
   min-width: 0;
   padding: 8px;
 }
+
+/* --- auth --- */
+
+#user {
+  color: #9aa3b2;
+  font-size: 14px;
+}
+
+#auth {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+#auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(360px, 100%);
+  padding: 28px;
+  border: 1px solid #2a2f3a;
+  border-radius: 10px;
+  background: #151820;
+}
+
+#auth-form h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+#auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: #b4bccb;
+}
+
+#auth-form input {
+  padding: 8px 10px;
+  border: 1px solid #3a4150;
+  border-radius: 6px;
+  background: #0f1115;
+  color: inherit;
+  font: inherit;
+}
+
+#auth-form input:focus {
+  outline: 2px solid #5b8def;
+  outline-offset: -1px;
+}
+
+#auth-form button[type='submit'] {
+  padding: 9px 14px;
+  background: #23406e;
+  border-color: #5b8def;
+}
+
+#auth-error {
+  margin: 0;
+  min-height: 1.2em;
+  color: #f08b8b;
+  font-size: 14px;
+  white-space: pre-line;
+}
+
+#auth-form .switch {
+  margin: 0;
+  font-size: 14px;
+  color: #9aa3b2;
+}
+
+#auth-form a {
+  color: #8fb2f5;
+}

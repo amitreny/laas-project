@@ -21,13 +21,31 @@ const MIGRATIONS = [
      error            TEXT
    );
    CREATE INDEX sessions_state ON sessions (state);`,
+
+  `CREATE TABLE users (
+     id            TEXT PRIMARY KEY,
+     email         TEXT NOT NULL UNIQUE,
+     password_hash TEXT NOT NULL,
+     role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+     created_at    INTEGER NOT NULL
+   );
+   CREATE TABLE auth_tokens (
+     token_hash TEXT PRIMARY KEY,
+     user_id    TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+     created_at INTEGER NOT NULL,
+     expires_at INTEGER NOT NULL
+   );
+   -- Sessions from before this migration have no owner (NULL) and are reachable by nobody.
+   ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users (id);
+   CREATE INDEX sessions_user_state ON sessions (user_id, state);`,
 ];
 
 export function openDb(file = DB_PATH): DatabaseSync {
   if (file !== ':memory:') mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   // WAL lets readers proceed while a write is in progress; busy_timeout waits instead of failing on a lock.
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
+  // foreign_keys is off by default in SQLite, per connection.
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
 
   const { user_version: applied } = db.prepare('PRAGMA user_version').get() as { user_version: number };
   for (let version = applied; version < MIGRATIONS.length; version++) {

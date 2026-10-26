@@ -13,9 +13,28 @@
       <span id="timer"></span>
       <button id="extend" hidden>Extend time</button>
       <button id="stop" hidden>Stop lab</button>
+      <span id="user" hidden></span>
+      <button id="logout" hidden>Log out</button>
     </header>
 
-    <main id="catalog"></main>
+    <main id="auth" hidden>
+      <form id="auth-form">
+        <h2 id="auth-heading">Sign in</h2>
+        <label>Email <input id="email" type="email" autocomplete="email" required /></label>
+        <label>
+          Password
+          <input id="password" type="password" autocomplete="current-password" required />
+        </label>
+        <p id="auth-error" role="alert"></p>
+        <button type="submit" id="auth-submit">Sign in</button>
+        <p class="switch">
+          <span id="auth-switch-text">No account yet?</span>
+          <a href="#" id="auth-switch">Create one</a>
+        </p>
+      </form>
+    </main>
+
+    <main id="catalog" hidden></main>
 
     <main id="lab" hidden>
       <aside>
