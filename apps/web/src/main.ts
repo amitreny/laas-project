@@ -251,6 +251,7 @@ const END_MESSAGES: Record<NonNullable<Session['endReason']>, string> = {
   expired: "Time's up! This lab has expired.",
   idle: 'This lab was stopped because nobody was connected to it.',
   container_lost: 'The lab environment stopped unexpectedly.',
+  disk_limit: 'This lab was stopped because it used more disk space than it is allowed.',
   provision_failed: 'The lab failed to start.',
   interrupted: 'The lab was interrupted while starting.',
 };

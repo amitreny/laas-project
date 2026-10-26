@@ -1,6 +1,12 @@
 # Look around
 
-You are `root` inside your own isolated Linux container. Nothing you do here can affect anyone else, so feel free to experiment.
+You are `ubuntu`, a regular (non-admin) user, inside your own isolated Linux machine. Nothing you do here can affect anyone else, so feel free to experiment.
+
+Check who you are:
+
+```bash
+whoami
+```
 
 First, find out where you are:
 

@@ -7,6 +7,7 @@ export type EndReason =
   | 'expired' // hit its TTL
   | 'idle' // nobody attached for too long
   | 'container_lost' // the runtime lost the container (crash, OOM kill, someone ran `docker rm`)
+  | 'disk_limit' // wrote more to its filesystem than the lab allows
   | 'provision_failed' // image missing, setup script failed, ...
   | 'interrupted'; // the API restarted mid-provisioning
 

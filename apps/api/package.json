@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "labs:validate": "tsx src/scripts/validate-labs.ts",
     "labs:build": "tsx src/scripts/build-labs.ts",
-    "users:promote": "tsx src/scripts/promote-user.ts"
+    "users:promote": "tsx src/scripts/promote-user.ts",
+    "security:probe": "tsx src/scripts/security-probe.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",

@@ -9,7 +9,8 @@
     "typecheck": "npm run typecheck --workspaces",
     "labs:validate": "npm run labs:validate -w @laas/api --",
     "labs:build": "npm run labs:build -w @laas/api --",
-    "users:promote": "npm run users:promote -w @laas/api --"
+    "users:promote": "npm run users:promote -w @laas/api --",
+    "security:probe": "npm run security:probe -w @laas/api"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"

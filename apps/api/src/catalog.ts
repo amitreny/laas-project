@@ -8,27 +8,45 @@ export const LABS_DIR = process.env.LABS_DIR ?? fileURLToPath(new URL('../../../
 
 // Slugs end up in container labels, image tags and URLs, so keep them boring.
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const DOMAIN_RE = /^([a-z0-9-]+\.)+[a-z]{2,}$/;
+const USER_RE = /^[a-z_][a-z0-9_-]*$/;
 
 // The lab.yaml contract. Limits here are *platform policy*: lab authors pick resources,
 // but only within what the platform is willing to give a single session.
-const LabFileSchema = z.strictObject({
-  title: z.string().min(1),
-  description: z.string().min(1),
-  difficulty: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
-  // Omit `image` to build the lab's own Dockerfile (see `npm run labs:build`).
-  image: z.string().min(1).optional(),
-  workdir: z.string().startsWith('/').default('/root'),
-  resources: z
-    .strictObject({
-      memoryMb: z.number().int().min(64).max(2048).default(512),
-      cpus: z.number().positive().max(2).default(1),
-    })
-    .default({ memoryMb: 512, cpus: 1 }),
-  ttlMinutes: z.number().int().min(5).max(240).default(60), // enforced from Phase 3
-  // Runs once inside the container, as root, before the user gets a shell.
-  setup: z.string().optional(),
-  steps: z.array(z.strictObject({ title: z.string().min(1), file: z.string().min(1) })).min(1),
-});
+const LabFileSchema = z
+  .strictObject({
+    title: z.string().min(1),
+    description: z.string().min(1),
+    difficulty: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
+    // Omit `image` to build the lab's own Dockerfile (see `npm run labs:build`).
+    image: z.string().min(1).optional(),
+    // Least privilege: use a regular user unless the lab really needs root. Either way, root here is
+    // a heavily restricted root (see LAB_CAPABILITIES in providers/docker.ts).
+    user: z.string().regex(USER_RE).default('root'),
+    workdir: z.string().startsWith('/').default('/root'),
+    resources: z
+      .strictObject({
+        memoryMb: z.number().int().min(64).max(2048).default(512),
+        cpus: z.number().positive().max(2).default(1),
+        diskMb: z.number().int().min(64).max(4096).default(1024),
+      })
+      .default({ memoryMb: 512, cpus: 1, diskMb: 1024 }),
+    ttlMinutes: z.number().int().min(5).max(240).default(60), // enforced from Phase 3
+    // `none`: no network at all. `egress`: HTTP(S) to the domains in `egress` (and subdomains) only.
+    network: z.enum(['none', 'egress']).default('none'),
+    egress: z.array(z.string().regex(DOMAIN_RE, 'must be a plain domain name like archive.ubuntu.com')).default([]),
+    // Runs once inside the container, as root, before the user gets a shell.
+    setup: z.string().optional(),
+    steps: z.array(z.strictObject({ title: z.string().min(1), file: z.string().min(1) })).min(1),
+  })
+  .superRefine((def, ctx) => {
+    if (def.network === 'egress' && def.egress.length === 0) {
+      ctx.addIssue({ code: 'custom', path: ['egress'], message: 'network: egress needs at least one domain' });
+    }
+    if (def.network === 'none' && def.egress.length > 0) {
+      ctx.addIssue({ code: 'custom', path: ['network'], message: '`egress` domains only apply with network: egress' });
+    }
+  });
 
 export interface LabStep {
   title: string;
@@ -44,9 +62,12 @@ export interface Lab {
   image: string;
   /** True when the image is built from labs/<slug>/Dockerfile rather than pulled. */
   builtLocally: boolean;
+  user: string;
   workdir: string;
-  resources: { memoryMb: number; cpus: number };
+  resources: { memoryMb: number; cpus: number; diskMb: number };
   ttlMinutes: number;
+  network: 'none' | 'egress';
+  egress: string[];
   setup?: string;
   steps: LabStep[];
 }
@@ -101,9 +122,12 @@ async function loadLab(dir: string): Promise<Lab> {
     difficulty: def.difficulty,
     image: def.image ?? `laas-lab/${slug}:latest`,
     builtLocally: !def.image,
+    user: def.user,
     workdir: def.workdir,
     resources: def.resources,
     ttlMinutes: def.ttlMinutes,
+    network: def.network,
+    egress: def.egress,
     setup: def.setup,
     steps,
   };

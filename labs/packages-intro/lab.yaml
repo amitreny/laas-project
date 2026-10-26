@@ -1,0 +1,23 @@
+title: Installing software
+description: Install packages with apt, and see how a lab's internet access is fenced in.
+difficulty: beginner
+image: ubuntu:24.04
+workdir: /root
+resources:
+  memoryMb: 512
+ttlMinutes: 30
+
+# This lab can reach the internet, but only over HTTP(S), only through its egress proxy,
+# and only to Ubuntu's package servers.
+network: egress
+egress:
+  - archive.ubuntu.com
+  - security.ubuntu.com
+
+steps:
+  - title: Install a package
+    file: steps/01-install.md
+  - title: Where does the traffic go?
+    file: steps/02-proxy.md
+  - title: Try to leave
+    file: steps/03-fence.md

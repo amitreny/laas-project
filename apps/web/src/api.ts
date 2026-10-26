@@ -28,7 +28,7 @@ export interface Session {
   startedAt: string | null;
   expiresAt: string | null;
   endedAt: string | null;
-  endReason: 'user' | 'expired' | 'idle' | 'container_lost' | 'provision_failed' | 'interrupted' | null;
+  endReason: 'user' | 'expired' | 'idle' | 'container_lost' | 'disk_limit' | 'provision_failed' | 'interrupted' | null;
   error: string | null;
 }
 

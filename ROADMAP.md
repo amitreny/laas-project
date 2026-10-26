@@ -50,7 +50,7 @@ Kubernetes is the second (Phase 9). If that swap is painless, the abstraction wa
   and fix both directions (orphan containers, ghost sessions).
 - Reconnect: refresh the page and get back into the same session.
 
-## Phase 4 — Users, auth & quotas  ← *we are here*
+## Phase 4 — Users, auth & quotas  ✅
 **Learn:** authn vs authz, session cookies/JWT, multi-tenancy basics, rate limiting.
 - Email + password (scrypt) with a revocable, server-side login token in an HttpOnly cookie.
   Later: OIDC via GitHub/Google, email verification.
@@ -58,13 +58,17 @@ Kubernetes is the second (Phase 9). If that swap is painless, the abstraction wa
 - Quotas: max concurrent labs per user and globally (checked atomically), per-IP rate limits.
 - Signed, 30-second HMAC tickets for WebSocket attach; Origin check against CSRF.
 
-## Phase 5 — Isolation & security
+## Phase 5 — Isolation & security  ← *we are here*
 **Learn:** the threat model of running untrusted users' code — the core risk of any LaaS.
-- Hardening: non-root user, `no-new-privileges`, drop capabilities, read-only rootfs + tmpfs, seccomp.
-- Network: a dedicated bridge network per session, block access to the host / metadata IPs / other labs,
-  egress allow-lists.
-- Stronger sandboxes: compare gVisor, Kata Containers, Sysbox, Firecracker microVMs.
-- Write `SECURITY.md`: what an attacker inside a lab can and cannot do, and why.
+- Hardening: all but 7 capabilities dropped, `no-new-privileges`, seccomp kept on, no swap,
+  per-lab non-root `user:`. (Read-only rootfs is used for the egress proxy; it doesn't suit labs,
+  where changing the filesystem is the point.)
+- Network: no network by default; `network: egress` labs get a private internal network whose only
+  exit is a per-lab allow-listing proxy. Host, metadata IPs and other labs are unreachable.
+- Disk budgets enforced by the controller loop.
+- `npm run security:probe` attacks every lab and compares with an unhardened control.
+- Stronger sandboxes compared in `SECURITY.md` (gVisor, Kata, Firecracker, Sysbox).
+- `SECURITY.md`: what an attacker inside a lab can and cannot do, and why.
 
 ## Phase 6 — Challenges & validation
 **Learn:** how lab platforms grade work.

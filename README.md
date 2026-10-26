@@ -9,7 +9,10 @@ See [ROADMAP.md](ROADMAP.md) for the phased plan.
 apps/api   Fastify control plane, lab catalog loader, Docker provider (dockerode)
 apps/web   Vite + xterm.js: lab picker, step instructions, browser terminal
 labs/      Lab content: one folder per lab (lab.yaml + steps/*.md + optional Dockerfile)
+infra/     Images the platform itself runs (the egress proxy)
 ```
+
+Security model and threat analysis: [SECURITY.md](SECURITY.md).
 
 ## Run
 
@@ -17,7 +20,7 @@ Prerequisite: Docker Desktop running (`docker run hello-world` works).
 
 ```sh
 npm install
-npm run labs:build   # build images for labs that ship a Dockerfile
+npm run labs:build   # build the egress proxy and labs that ship a Dockerfile
 npm run dev          # api on :3000, web on :5173
 ```
 
@@ -36,6 +39,7 @@ Sessions are stored in `data/laas.db` (SQLite) and keep running across API resta
 | `MAX_ACTIVE_SESSIONS` | 20 | active labs across the whole platform |
 | `AUTH_SECRET` | random per start | HMAC key for terminal tickets; must be shared by all API processes |
 | `TRUST_PROXY` | false | set `true` behind a reverse proxy so rate limits see real client IPs |
+| `LAB_RUNTIME` | runc | container runtime for labs, e.g. `runsc` (gVisor) where installed |
 | `DB_PATH`, `PORT`, `LABS_DIR` | | where things live |
 
 ## Users
@@ -50,9 +54,11 @@ npm run users:promote someone@example.com
 
 ```
 labs/<slug>/
-  lab.yaml        title, description, image (or a Dockerfile), workdir, resources, setup, steps
+  lab.yaml        title, description, image (or a Dockerfile), user, workdir, resources
+                  (memoryMb, cpus, diskMb), network (none | egress) + egress domains, setup, steps
   steps/*.md      one Markdown file per step; ```bash blocks get a Run button
   Dockerfile      optional, for labs that need tools baked into the image
 ```
 
 `npm run labs:validate` checks every lab against the schema in `apps/api/src/catalog.ts`.
+`npm run security:probe` attacks every lab from the inside and checks each attack is blocked.

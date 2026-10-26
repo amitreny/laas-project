@@ -6,6 +6,7 @@ import type { LabProvider } from './providers/types.js';
 import { ACTIVE_STATES, type EndReason, type InsertResult, type Limits, type SessionRow, type SessionStore } from './sessions.js';
 
 const MINUTE = 60_000;
+const MB = 1024 * 1024;
 
 export interface LifecycleConfig {
   /** End a running lab after this long with no terminal attached. */
@@ -78,9 +79,11 @@ export class SessionManager extends EventEmitter<{ terminating: [sessionId: stri
         sessionId: id,
         labSlug: lab.slug,
         image: lab.image,
+        user: lab.user,
         workdir: lab.workdir,
         memoryMb: lab.resources.memoryMb,
         cpus: lab.resources.cpus,
+        network: lab.network === 'egress' ? { mode: 'egress', allow: lab.egress } : { mode: 'none' },
         setup: lab.setup,
       });
     } catch (err) {
@@ -220,16 +223,21 @@ export class SessionManager extends EventEmitter<{ terminating: [sessionId: stri
     const instances = await this.provider.list();
     const byId = new Map(instances.map((i) => [i.sessionId, i]));
 
-    // Database says running, runtime disagrees → the lab is gone (crashed, OOM-killed, removed by hand).
     for (const s of this.store.listByState('running')) {
-      if (!byId.get(s.id)?.running) await this.terminate(s.id, 'container_lost');
+      const instance = byId.get(s.id);
+      // Database says running, runtime disagrees → the lab is gone (crashed, OOM-killed, removed by hand).
+      if (!instance?.running) await this.terminate(s.id, 'container_lost');
+      // Docker can't cap a container's disk usage on every storage driver, so we measure and enforce.
+      else if (instance.diskBytes > (this.catalog.get(s.lab)?.resources.diskMb ?? Infinity) * MB) {
+        await this.terminate(s.id, 'disk_limit');
+      }
     }
 
-    // Runtime has containers the database doesn't want → orphans. Remove them, or they leak forever.
+    // Runtime has resources the database doesn't want → orphans. Remove them, or they leak forever.
     for (const instance of instances) {
       const s = this.store.get(instance.sessionId);
       if (!s || s.state === 'terminated' || s.state === 'failed') {
-        this.log.warn({ sessionId: instance.sessionId }, 'removing orphaned container');
+        this.log.warn({ sessionId: instance.sessionId }, 'removing orphaned lab resources');
         await this.provider.destroy(instance.sessionId);
       }
     }
